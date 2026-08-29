@@ -100,6 +100,8 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+  implementation("androidx.credentials:credentials:1.3.0")
   implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
   implementation("com.github.topjohnwu.libsu:core:5.2.2")
   implementation("androidx.security:security-crypto:1.1.0-alpha06")

@@ -62,6 +62,7 @@ fun HomeScreen(viewModel: AgentViewModel = viewModel(factory = AgentViewModel.Fa
     var expandedModelMenu by remember { mutableStateOf(false) }
 
     ModalNavigationDrawer(
+        modifier = Modifier.systemBarsPadding(),
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
@@ -248,9 +249,9 @@ fun HomeScreen(viewModel: AgentViewModel = viewModel(factory = AgentViewModel.Fa
     }
 
     if (showSettings) {
-        SettingsDialog(
-            onDismiss = { viewModel.setShowSettings(false) },
-            onSave = { key -> viewModel.saveApiKey(context, key) }
+        AccountProjectsDialog(
+            viewModel = viewModel,
+            onDismiss = { viewModel.setShowSettings(false) }
         )
     }
 }
@@ -570,8 +571,15 @@ fun TerminalView(viewModel: AgentViewModel) {
 }
 
 @Composable
-fun SettingsDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    var key by remember { mutableStateOf("") }
+fun AccountProjectsDialog(viewModel: AgentViewModel, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val authMode by viewModel.authMode.collectAsState()
+    val apiKey by viewModel.apiKey.collectAsState()
+    val email by viewModel.googleAccountEmail.collectAsState()
+    val projects by viewModel.availableProjects.collectAsState()
+    val currentProject by viewModel.googleProjectId.collectAsState()
+    
+    var keyInput by remember { mutableStateOf(apiKey ?: "") }
     
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -584,17 +592,63 @@ fun SettingsDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "API Configuration",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text("Gemini API Key") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Text("Account & Projects", style = MaterialTheme.typography.titleLarge)
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    FilterChip(
+                        selected = authMode == "API_KEY",
+                        onClick = { viewModel.setAuthMode("API_KEY") },
+                        label = { Text("API Key") }
+                    )
+                    FilterChip(
+                        selected = authMode == "GOOGLE",
+                        onClick = { viewModel.setAuthMode("GOOGLE") },
+                        label = { Text("Google Sign-In") }
+                    )
+                }
+
+                if (authMode == "API_KEY") {
+                    OutlinedTextField(
+                        value = keyInput,
+                        onValueChange = { keyInput = it },
+                        label = { Text("Gemini API Key") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    if (email == null) {
+                        Button(
+                            onClick = { viewModel.signInWithGoogle(context, "YOUR_WEB_CLIENT_ID") },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Sign in with Google")
+                        }
+                    } else {
+                        Text("Signed in as: $email", style = MaterialTheme.typography.bodyMedium)
+                        
+                        var expanded by remember { mutableStateOf(false) }
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(currentProject ?: "Select GCP Project")
+                            }
+                            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                projects.forEach { proj ->
+                                    DropdownMenuItem(
+                                        text = { Text(proj) },
+                                        onClick = { 
+                                            viewModel.setGoogleProjectId(proj)
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -603,8 +657,14 @@ fun SettingsDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
                         Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { if (key.isNotBlank()) onSave(key) }) {
-                        Text("Save")
+                    Button(onClick = { 
+                        if (authMode == "API_KEY" && keyInput.isNotBlank()) {
+                            viewModel.saveApiKey(context, keyInput)
+                        } else {
+                            onDismiss()
+                        }
+                    }) {
+                        Text(if (authMode == "API_KEY") "Save" else "Close")
                     }
                 }
             }
