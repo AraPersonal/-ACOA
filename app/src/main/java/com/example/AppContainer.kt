@@ -12,6 +12,7 @@ interface AppContainer {
 class DefaultAppContainer(private val context: Context) : AppContainer {
     private val database: AgentDatabase by lazy {
         Room.databaseBuilder(context, AgentDatabase::class.java, "agent_database")
+            .fallbackToDestructiveMigration()
             .build()
     }
 

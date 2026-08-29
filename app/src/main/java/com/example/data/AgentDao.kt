@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.Flow
 interface AgentDao {
     @Query("SELECT * FROM chat_sessions ORDER BY timestamp DESC")
     fun getAllSessions(): Flow<List<ChatSession>>
+    
+    @Query("SELECT * FROM chat_sessions WHERE sessionType = :type ORDER BY timestamp DESC")
+    fun getSessionsByType(type: String): Flow<List<ChatSession>>
 
     @Insert
     suspend fun insertSession(session: ChatSession): Long
@@ -29,4 +32,16 @@ interface AgentDao {
     
     @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId")
     suspend fun deleteMessagesForSession(sessionId: Int)
+    
+    @Query("SELECT * FROM asset_versions ORDER BY timestamp DESC")
+    fun getAllAssetVersions(): Flow<List<AssetVersion>>
+    
+    @Query("SELECT * FROM asset_versions WHERE type = :type ORDER BY timestamp DESC")
+    fun getAssetVersionsByType(type: String): Flow<List<AssetVersion>>
+    
+    @Query("SELECT * FROM asset_versions WHERE sessionId = :sessionId ORDER BY timestamp DESC")
+    fun getAssetVersionsForSession(sessionId: Int): Flow<List<AssetVersion>>
+    
+    @Insert
+    suspend fun insertAssetVersion(assetVersion: AssetVersion): Long
 }
