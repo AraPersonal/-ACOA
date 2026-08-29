@@ -83,6 +83,16 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
     private val _currentModelName = MutableStateFlow("gemini-2.5-flash")
     val currentModelName: StateFlow<String> = _currentModelName.asStateFlow()
 
+    private val _temperature = MutableStateFlow(1.0f)
+    val temperature: StateFlow<Float> = _temperature.asStateFlow()
+
+    private val _githubPat = MutableStateFlow("")
+    val githubPat: StateFlow<String> = _githubPat.asStateFlow()
+
+    private val _workspaceDir = MutableStateFlow("/sdcard/NexusWorkspace")
+    val workspaceDir: StateFlow<String> = _workspaceDir.asStateFlow()
+
+
     private var geminiService: GeminiService? = null
     private var generationJob: Job? = null
     
@@ -215,15 +225,25 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
         )
         
         val key = sharedPreferences.getString("api_key", null)
+        val model = sharedPreferences.getString("model_name", "gemini-2.5-flash") ?: "gemini-2.5-flash"
+        val temp = sharedPreferences.getFloat("temperature", 1.0f)
+        val pat = sharedPreferences.getString("github_pat", "") ?: ""
+        val workspace = sharedPreferences.getString("workspace_dir", "/sdcard/NexusWorkspace") ?: "/sdcard/NexusWorkspace"
+        
         _apiKey.value = key
+        _currentModelName.value = model
+        _temperature.value = temp
+        _githubPat.value = pat
+        _workspaceDir.value = workspace
+
         if (!key.isNullOrBlank()) {
-            geminiService = GeminiService(key, _currentModelName.value)
+            geminiService = GeminiService(key, model, temp, pat, workspace)
         } else {
             _showSettings.value = true
         }
     }
     
-    fun saveApiKey(context: Context, key: String) {
+    fun saveSettings(context: Context, key: String, model: String, temp: Float, pat: String, workspace: String) {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -235,10 +255,27 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
-        sharedPreferences.edit().putString("api_key", key).apply()
+
+        sharedPreferences.edit()
+            .putString("api_key", key)
+            .putString("model_name", model)
+            .putFloat("temperature", temp)
+            .putString("github_pat", pat)
+            .putString("workspace_dir", workspace)
+            .apply()
+            
         _apiKey.value = key
-        geminiService = GeminiService(key, _currentModelName.value)
+        _currentModelName.value = model
+        _temperature.value = temp
+        _githubPat.value = pat
+        _workspaceDir.value = workspace
+        
+        geminiService = GeminiService(key, model, temp, pat, workspace)
         _showSettings.value = false
+    }
+    
+    fun saveApiKey(context: Context, key: String) {
+        saveSettings(context, key, _currentModelName.value, _temperature.value, _githubPat.value, _workspaceDir.value)
     }
 
     fun setModel(modelName: String) {
@@ -313,7 +350,7 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
                             val asRoot = args.optBoolean("as_root")
                             val logStr = "> run_shell(asRoot=$asRoot): $cmd"
                             logToTerminal(logStr)
-                            val out = AgentTools.executeRunShell(cmd, asRoot)
+                            val out = AgentTools.executeRunShell(cmd, asRoot, _workspaceDir.value)
                             logToTerminal(out)
                             repository.insertMessage(ChatMessageEntity(sessionId = sessionId, role = "tool", content = "[TOOL_CALL] run_shell\nCommand: $cmd\nOutput:\n$out"))
                             JSONObject(out)
@@ -326,6 +363,16 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
                             val out = AgentTools.executeWriteFile(path, content)
                             logToTerminal(out)
                             repository.insertMessage(ChatMessageEntity(sessionId = sessionId, role = "tool", content = "[TOOL_CALL] write_file\nPath: $path\nOutput:\n$out"))
+                            JSONObject(out)
+                        }
+                        
+                        "setup_build_environment" -> {
+                            val workspaceDir = args.optString("workspace_dir", _workspaceDir.value)
+                            val logStr = "> setup_build_environment: $workspaceDir"
+                            logToTerminal(logStr)
+                            val out = AgentTools.executeSetupBuildEnv(workspaceDir)
+                            logToTerminal(out)
+                            repository.insertMessage(ChatMessageEntity(sessionId = sessionId, role = "tool", content = "[TOOL_CALL] setup_build_environment\nWorkspace: $workspaceDir\nOutput:\n$out"))
                             JSONObject(out)
                         }
                         "read_file" -> {
@@ -363,6 +410,23 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
     }
 
     private var monitorJob: Job? = null
+
+    
+    fun installApk(path: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cmd = "pm install '$path'"
+                val result = com.topjohnwu.superuser.Shell.cmd(cmd).exec()
+                if (result.isSuccess) {
+                    _terminalLogs.value += "\n[System] Successfully installed $path"
+                } else {
+                    _terminalLogs.value += "\n[System] Failed to install $path: ${result.err.joinToString("\n")}"
+                }
+            } catch (e: Exception) {
+                _terminalLogs.value += "\n[System] Error installing APK: ${e.message}"
+            }
+        }
+    }
 
     fun startSystemMonitor(context: android.content.Context) {
         if (monitorJob != null && monitorJob!!.isActive) return

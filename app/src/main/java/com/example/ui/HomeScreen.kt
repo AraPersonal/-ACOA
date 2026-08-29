@@ -42,6 +42,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import java.io.File
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(viewModel: AgentViewModel = viewModel(factory = AgentViewModel.Factory)) {
@@ -235,6 +239,14 @@ fun HomeScreen(viewModel: AgentViewModel = viewModel(factory = AgentViewModel.Fa
                         unselectedContentColor = Color(0xFFCAC4D0),
                         modifier = if (selectedTabIndex == 2) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) else Modifier
                     )
+                    Tab(
+                        selected = selectedTabIndex == 3,
+                        onClick = { selectedTabIndex = 3 },
+                        text = { Text("FILES", style = MaterialTheme.typography.labelLarge) },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = Color(0xFFCAC4D0),
+                        modifier = if (selectedTabIndex == 3) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) else Modifier
+                    )
                 }
 
                 Box(modifier = Modifier.weight(1f)) {
@@ -242,6 +254,7 @@ fun HomeScreen(viewModel: AgentViewModel = viewModel(factory = AgentViewModel.Fa
                         0 -> ChatView(viewModel)
                         1 -> TerminalView(viewModel)
                         2 -> SystemMonitorView(viewModel)
+                        3 -> FileManagerView(viewModel)
                     }
                 }
             }
@@ -300,8 +313,34 @@ fun ChatView(viewModel: AgentViewModel) {
     val currentToolName by viewModel.currentToolName.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
     var inputText by remember { mutableStateOf("") }
+    
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    LaunchedEffect(isToolRunning) {
+        if (isToolRunning) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+    LaunchedEffect(isGenerating) {
+        if (!isGenerating) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+    
+    val transition = rememberInfiniteTransition(label = "bg")
+    val alphaAnim by transition.animateFloat(
+        initialValue = 0.0f,
+        targetValue = if (isGenerating) 0.15f else 0.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ), label = "bg_anim"
+    )
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(
+        Brush.verticalGradient(
+            colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = alphaAnim), Color.Transparent)
+        )
+    )) {
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -421,7 +460,7 @@ fun MessageBubble(message: ChatMessageEntity) {
     if (isTool) {
         var expanded by remember { mutableStateOf(false) }
         val lines = message.content.lines()
-        val title = lines.firstOrNull() ?: "Tool Call"
+        val title = lines.firstOrNull()?.replace("[TOOL_CALL]", "⚙️ Executing") ?: "⚙️ Executing..."
         val body = lines.drop(1).joinToString("\n")
         
         Box(
@@ -430,18 +469,22 @@ fun MessageBubble(message: ChatMessageEntity) {
         ) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                 modifier = Modifier.fillMaxWidth(0.9f).clickable { expanded = !expanded }
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Build, contentDescription = "Tool", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
                             Spacer(Modifier.width(8.dp))
-                            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontFamily = FontFamily.Monospace)
+                            Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontFamily = FontFamily.Monospace)
                         }
-                        Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = "Expand", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = "Expand", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                     AnimatedVisibility(visible = expanded) {
                         Column(modifier = Modifier.padding(top = 8.dp)) {
@@ -449,7 +492,7 @@ fun MessageBubble(message: ChatMessageEntity) {
                                 Text(
                                     text = body, 
                                     color = MaterialTheme.colorScheme.secondary, 
-                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                                 )
                             }
                         }
@@ -579,6 +622,16 @@ fun AccountProjectsDialog(viewModel: AgentViewModel, onDismiss: () -> Unit) {
     val projects by viewModel.availableProjects.collectAsState()
     val currentProject by viewModel.googleProjectId.collectAsState()
     
+    val currentModel by viewModel.currentModelName.collectAsState()
+    val currentTemp by viewModel.temperature.collectAsState()
+    val currentPat by viewModel.githubPat.collectAsState()
+    val currentWorkspace by viewModel.workspaceDir.collectAsState()
+    
+    var tempInput by remember { mutableFloatStateOf(currentTemp) }
+    var patInput by remember { mutableStateOf(currentPat) }
+    var workspaceInput by remember { mutableStateOf(currentWorkspace) }
+    var modelInput by remember { mutableStateOf(currentModel) }
+    
     val authErrorMessage by viewModel.authErrorMessage.collectAsState()
 
     LaunchedEffect(authErrorMessage) {
@@ -620,13 +673,43 @@ fun AccountProjectsDialog(viewModel: AgentViewModel, onDismiss: () -> Unit) {
                 }
 
                 if (authMode == "API_KEY") {
-                    OutlinedTextField(
-                        value = keyInput,
-                        onValueChange = { keyInput = it },
-                        label = { Text("Gemini API Key") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        item {
+                            OutlinedTextField(
+                                value = keyInput,
+                                onValueChange = { keyInput = it },
+                                label = { Text("Gemini API Key") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = workspaceInput,
+                                onValueChange = { workspaceInput = it },
+                                label = { Text("Workspace Directory") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = patInput,
+                                onValueChange = { patInput = it },
+                                label = { Text("GitHub PAT") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        item {
+                            Text("Temperature: ${String.format(java.util.Locale.US, "%.1f", tempInput)}")
+                            Slider(
+                                value = tempInput,
+                                onValueChange = { tempInput = it },
+                                valueRange = 0f..2f
+                            )
+                        }
+                    }
                 } else {
                     if (email == null) {
                         Button(
@@ -679,7 +762,7 @@ fun AccountProjectsDialog(viewModel: AgentViewModel, onDismiss: () -> Unit) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = { 
                         if (authMode == "API_KEY" && keyInput.isNotBlank()) {
-                            viewModel.saveApiKey(context, keyInput)
+                            viewModel.saveSettings(context, keyInput, modelInput, tempInput, patInput, workspaceInput)
                         } else {
                             onDismiss()
                         }
@@ -782,6 +865,74 @@ fun MetricCard(title: String, usagePercent: Float, valueText: String, detailText
                 color = progressColor,
                 trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
             )
+        }
+    }
+}
+
+@Composable
+fun FileManagerView(viewModel: AgentViewModel) {
+    val workspace by viewModel.workspaceDir.collectAsState()
+    var files by remember { mutableStateOf(emptyList<File>()) }
+    
+    LaunchedEffect(workspace) {
+        val dir = File(workspace)
+        if (!dir.exists()) dir.mkdirs()
+        files = dir.listFiles()?.toList()?.sortedBy { !it.isDirectory } ?: emptyList()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp)
+            .background(Color(0xFF000000), RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = "WORKSPACE: $workspace",
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), thickness = 1.dp, modifier = Modifier.padding(bottom = 8.dp))
+            
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(files) { file ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (file.isDirectory) Icons.Default.Folder else Icons.Default.InsertDriveFile,
+                                contentDescription = null,
+                                tint = if (file.isDirectory) Color(0xFFE6C84C) else MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = file.name,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                            )
+                        }
+                        if (file.name.endsWith(".apk")) {
+                            Button(
+                                onClick = { viewModel.installApk(file.absolutePath) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("Install", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
