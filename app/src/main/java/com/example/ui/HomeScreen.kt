@@ -270,6 +270,7 @@ fun ConsoleView(viewModel: AgentViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsView(viewModel: AgentViewModel) {
     val context = LocalContext.current as android.app.Activity
@@ -284,11 +285,47 @@ fun SettingsView(viewModel: AgentViewModel) {
     var patInput by remember { mutableStateOf(currentPat) }
     var workspaceInput by remember { mutableStateOf(currentWorkspace) }
     var modelInput by remember { mutableStateOf(currentModel) }
+    var expanded by remember { mutableStateOf(false) }
+    val availableModels = listOf("gemini-3.6-flash", "models/gemini-3.1-pro-preview", "gemini-1.5-pro", "gemini-1.5-flash")
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Settings", style = MaterialTheme.typography.titleLarge, color = Color.White)
         Spacer(modifier = Modifier.height(16.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item {
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = modelInput,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("AI Model", color = Color.Gray) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFF4A4950), unfocusedBorderColor = Color(0xFF4A4950)
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.background(Color(0xFF2D2C31))
+                    ) {
+                        availableModels.forEach { modelName ->
+                            DropdownMenuItem(
+                                text = { Text(modelName, color = Color.White) },
+                                onClick = {
+                                    modelInput = modelName
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
             item {
                 OutlinedTextField(
                     value = keyInput, onValueChange = { keyInput = it }, label = { Text("Gemini API Key", color = Color.Gray) },

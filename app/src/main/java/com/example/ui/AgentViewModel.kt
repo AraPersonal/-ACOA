@@ -82,7 +82,7 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
     private val _apiKey = MutableStateFlow<String?>(null)
     val apiKey: StateFlow<String?> = _apiKey.asStateFlow()
 
-    private val _currentModelName = MutableStateFlow("gemini-2.5-flash")
+    private val _currentModelName = MutableStateFlow("gemini-3.6-flash")
     val currentModelName: StateFlow<String> = _currentModelName.asStateFlow()
 
     private val _temperature = MutableStateFlow(1.0f)
@@ -284,7 +284,7 @@ init {
         )
         
         val key = sharedPreferences.getString("api_key", null)
-        val model = sharedPreferences.getString("model_name", "gemini-2.5-flash") ?: "gemini-2.5-flash"
+        val model = sharedPreferences.getString("model_name", "gemini-3.6-flash") ?: "gemini-3.6-flash"
         val temp = sharedPreferences.getFloat("temperature", 1.0f)
         val pat = sharedPreferences.getString("github_pat", "") ?: ""
         val workspace = sharedPreferences.getString("workspace_dir", "/sdcard/NexusWorkspace") ?: "/sdcard/NexusWorkspace"
