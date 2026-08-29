@@ -572,13 +572,22 @@ fun TerminalView(viewModel: AgentViewModel) {
 
 @Composable
 fun AccountProjectsDialog(viewModel: AgentViewModel, onDismiss: () -> Unit) {
-    val context = LocalContext.current
+    val context = LocalContext.current as android.app.Activity
     val authMode by viewModel.authMode.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val email by viewModel.googleAccountEmail.collectAsState()
     val projects by viewModel.availableProjects.collectAsState()
     val currentProject by viewModel.googleProjectId.collectAsState()
     
+    val authErrorMessage by viewModel.authErrorMessage.collectAsState()
+
+    LaunchedEffect(authErrorMessage) {
+        authErrorMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            viewModel.clearAuthErrorMessage()
+        }
+    }
+
     var keyInput by remember { mutableStateOf(apiKey ?: "") }
     
     Dialog(onDismissRequest = onDismiss) {
@@ -621,7 +630,18 @@ fun AccountProjectsDialog(viewModel: AgentViewModel, onDismiss: () -> Unit) {
                 } else {
                     if (email == null) {
                         Button(
-                            onClick = { viewModel.signInWithGoogle(context, "YOUR_WEB_CLIENT_ID") },
+                            onClick = {
+                                val clientId = "YOUR_WEB_CLIENT_ID"
+                                if (clientId == "YOUR_WEB_CLIENT_ID" || clientId.isBlank()) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Web Client ID is missing. Please configure it in Settings.",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                } else {
+                                    viewModel.signInWithGoogle(context, clientId)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Sign in with Google")

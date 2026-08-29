@@ -118,6 +118,13 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
     }
 
     
+    private val _authErrorMessage = MutableStateFlow<String?>(null)
+    val authErrorMessage: StateFlow<String?> = _authErrorMessage.asStateFlow()
+
+    fun clearAuthErrorMessage() {
+        _authErrorMessage.value = null
+    }
+
     fun setAuthMode(mode: String) {
         _authMode.value = mode
     }
@@ -151,8 +158,12 @@ class AgentViewModel(private val repository: AgentRepository) : ViewModel() {
                     _googleIdToken.value = googleIdTokenCredential.idToken
                     fetchGoogleCloudProjects(googleIdTokenCredential.idToken)
                 }
+            } catch (e: GetCredentialException) {
+                android.util.Log.e("GoogleSignIn", "GetCredentialException failed", e)
+                _authErrorMessage.value = "Credential error: ${e.message}"
             } catch (e: Exception) {
-                _terminalLogs.value += "\nGoogle Sign-In Failed: ${e.message}"
+                android.util.Log.e("GoogleSignIn", "Auth failed", e)
+                _authErrorMessage.value = "Sign-In Failed: ${e.message}"
             }
         }
     }
